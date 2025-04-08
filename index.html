@@ -183,7 +183,7 @@
     }
 
     // Load current version on page load
-    window.onload = () => {
+   window.onload = () => {
   const tokenInput = document.getElementById('tokenInput');
   const versionField = document.getElementById('versionField');
 
@@ -195,13 +195,11 @@
 
     try {
       const result = await fetchVersionFile(token);
-      if (result.content) {
-        versionField.value = result.content;
-      } else {
-        versionField.value = "Unable to fetch version.";
-      }
+      versionField.value = result.content;
+      console.log("✅ Version loaded:", result.content);
     } catch (e) {
-      versionField.value = "Error fetching version.txt.";
+      versionField.value = "❌ Error loading version.";
+      console.error(e);
     }
   });
 };
