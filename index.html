@@ -135,49 +135,41 @@
       return res.ok;
     }
 
-    async function uploadFile(token, file) {
-      const arrayBuffer = await file.arrayBuffer();
-      const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+async function uploadFile(token, file) {
+  const filePath = `${updaterPath}/Main.rar`;
+  const apiUrl = `https://api.github.com/repos/${username}/${repo}/contents/${filePath}`;
 
-      // Delete old file first
-      const getUrl = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/Main.rar`;
-      const getRes = await fetch(getUrl, {
-        headers: {
-          Authorization: `token ${token}`,
-          Accept: "application/vnd.github.v3+json"
-        }
-      });
+  const headers = {
+    Authorization: `token ${token}`,
+    Accept: "application/vnd.github.v3+json"
+  };
 
-      if (getRes.ok) {
-        const fileData = await getRes.json();
-        await fetch(getUrl, {
-          method: "DELETE",
-          headers: {
-            Authorization: `token ${token}`,
-            Accept: "application/vnd.github.v3+json"
-          },
-          body: JSON.stringify({
-            message: "Deleted old Main.rar",
-            sha: fileData.sha
-          })
-        });
-      }
+  // Step 1: Check if the old file exists
+  let sha = null;
+  const getRes = await fetch(apiUrl, { headers });
+  if (getRes.ok) {
+    const data = await getRes.json();
+    sha = data.sha;
+  }
 
-      // Upload new file
-      const putRes = await fetch(getUrl, {
-        method: "PUT",
-        headers: {
-          Authorization: `token ${token}`,
-          Accept: "application/vnd.github.v3+json"
-        },
-        body: JSON.stringify({
-          message: "Uploaded new Main.rar via web dashboard",
-          content: base64Data
-        })
-      });
+  // Step 2: Prepare new file content
+  const arrayBuffer = await file.arrayBuffer();
+  const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-      return putRes.ok;
-    }
+  // Step 3: Upload new file (overwrite if sha is known)
+  const putRes = await fetch(apiUrl, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      message: "Uploaded new Main.rar via web dashboard",
+      content: base64Data,
+      ...(sha && { sha }) // Only include sha if exists
+    })
+  });
+
+  return putRes.ok;
+}
+
 
     async function postUpdate() {
       const token = document.getElementById("tokenInput").value.trim();
