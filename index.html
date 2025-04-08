@@ -183,18 +183,29 @@
     }
 
     // Load current version on page load
-    window.onload = async () => {
-      const tokenInput = document.getElementById('tokenInput');
-      tokenInput.addEventListener("change", async () => {
-        const token = tokenInput.value.trim();
-        const versionField = document.getElementById('versionField');
+    window.onload = () => {
+  const tokenInput = document.getElementById('tokenInput');
+  const versionField = document.getElementById('versionField');
 
-        if (token) {
-          const result = await fetchVersionFile(token);
-          if (result.content) versionField.value = result.content;
-        }
-      });
-    };
+  tokenInput.addEventListener("input", async () => {
+    const token = tokenInput.value.trim();
+    if (!token) return;
+
+    versionField.value = "Fetching version...";
+
+    try {
+      const result = await fetchVersionFile(token);
+      if (result.content) {
+        versionField.value = result.content;
+      } else {
+        versionField.value = "Unable to fetch version.";
+      }
+    } catch (e) {
+      versionField.value = "Error fetching version.txt.";
+    }
+  });
+};
+
   </script>
 </body>
 </html>
