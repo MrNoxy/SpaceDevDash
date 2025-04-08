@@ -2,208 +2,232 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Updater Tool</title>
+  <title>SpaceDevDash - Updater</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #18191d;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #18191d;
       color: white;
-      padding: 40px;
+      display: flex;
+      flex-direction: row;
     }
 
-    section {
-      background: #24252b;
+    .updater-section {
+      width: 33%;
+      min-width: 300px;
       padding: 20px;
-      margin-bottom: 30px;
-      border-radius: 12px;
+      background-color: #202127;
       box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
     }
 
-    input, textarea, button {
-      margin: 10px 0;
-      padding: 10px;
-      font-size: 16px;
-      border: none;
-      border-radius: 6px;
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    input, textarea {
       width: 100%;
-      box-sizing: border-box;
+      margin-top: 5px;
+      padding: 8px;
+      border-radius: 5px;
+      border: none;
+      background-color: #2c2d33;
+      color: white;
+    }
+
+    textarea {
+      height: 80px;
+      resize: vertical;
     }
 
     button {
-      background: #28a745;
+      margin-top: 15px;
+      padding: 10px;
+      width: 100%;
+      background-color: #4CAF50;
+      border: none;
       color: white;
+      border-radius: 5px;
       cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #45a049;
     }
 
     .status {
       margin-top: 10px;
-      font-size: 15px;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
 
-  <h1>🔧 Dev Panel — Part 1: Updater</h1>
+  <div class="updater-section">
+    <h1>Updater Panel</h1>
 
-  <section>
-    <h2>Upload New Main.rar and Update Version</h2>
-    <input type="file" id="rarInput" accept=".rar" />
-    <textarea id="versionField" rows="2" placeholder="Loading current version..."></textarea>
-    <input type="text" id="tokenInput" placeholder="Your GitHub Token (fine-grained)" />
-    <button onclick="uploadUpdater()">Post Update</button>
-    <div class="status" id="statusUpdater"></div>
-  </section>
+    <label for="tokenInput">GitHub Token:</label>
+    <input type="password" id="tokenInput" placeholder="Paste GitHub token..." />
+
+    <label for="versionField">Current Version (edit to update):</label>
+    <textarea id="versionField" placeholder="Version info will appear here..."></textarea>
+
+    <label for="fileInput">RAR File (.rar):</label>
+    <input type="file" id="fileInput" accept=".rar" />
+
+    <button onclick="postUpdate()">Post</button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- Empty space for future parts -->
+  <div style="flex-grow: 1;"></div>
 
   <script>
-    const username = 'MrNoxy';
-    const repo = 'SpaceDevDash';
-    const updaterPath = 'updater';
+    const username = "MrNoxy";
+    const repo = "SpaceDevDash";
+    const updaterPath = "updater";
 
     async function fetchVersionFile(token) {
       const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/version.txt`;
       const res = await fetch(url, {
-        headers: { Authorization: `token ${token}` }
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json"
+        }
       });
 
       if (!res.ok) {
-        return 'Error fetching version.txt';
+        console.error("❌ Failed to fetch version.txt:", await res.text());
+        return { content: "❌ Failed to fetch version.txt", sha: null };
       }
 
       const data = await res.json();
-      const content = atob(data.content);
-      return { content, sha: data.sha };
+      const decodedContent = atob(data.content.replace(/\n/g, ""));
+      return { content: decodedContent, sha: data.sha };
     }
 
-    async function deleteMainRar(token) {
-      const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/Main.rar`;
-      const res = await fetch(url, {
-        headers: { Authorization: `token ${token}` }
-      });
-
-      if (res.status === 404) return null; // File doesn't exist
-
-      const data = await res.json();
-      const deleteRes = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `token ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: 'Delete old Main.rar',
-          sha: data.sha
-        })
-      });
-
-      return deleteRes.ok;
-    }
-
-    async function uploadMainRar(token, file) {
-      const reader = new FileReader();
-      return new Promise((resolve, reject) => {
-        reader.onload = async () => {
-          const base64Content = reader.result.split(',')[1];
-          const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/Main.rar`;
-
-          const res = await fetch(url, {
-            method: 'PUT',
-            headers: {
-              Authorization: `token ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              message: 'Upload new Main.rar',
-              content: base64Content
-            })
-          });
-
-          resolve(res.ok);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    async function updateVersionTxt(token, newContent, oldSha) {
+    async function updateVersionFile(token, newContent, sha) {
       const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/version.txt`;
 
-      const encoded = btoa(newContent);
-
       const res = await fetch(url, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
           Authorization: `token ${token}`,
-          'Content-Type': 'application/json'
+          Accept: "application/vnd.github.v3+json"
         },
         body: JSON.stringify({
-          message: 'Update version.txt',
-          content: encoded,
-          sha: oldSha
+          message: "Updated version.txt via web dashboard",
+          content: btoa(newContent),
+          sha: sha
         })
       });
 
       return res.ok;
     }
 
-    async function uploadUpdater() {
-      const token = document.getElementById('tokenInput').value.trim();
-      const file = document.getElementById('rarInput').files[0];
-      const versionField = document.getElementById('versionField');
-      const status = document.getElementById('statusUpdater');
+    async function uploadFile(token, file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-      if (!file || !token) {
-        alert("Please select a file and enter your GitHub token.");
-        return;
+      // Delete old file first
+      const getUrl = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/Main.rar`;
+      const getRes = await fetch(getUrl, {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json"
+        }
+      });
+
+      if (getRes.ok) {
+        const fileData = await getRes.json();
+        await fetch(getUrl, {
+          method: "DELETE",
+          headers: {
+            Authorization: `token ${token}`,
+            Accept: "application/vnd.github.v3+json"
+          },
+          body: JSON.stringify({
+            message: "Deleted old Main.rar",
+            sha: fileData.sha
+          })
+        });
       }
 
-      status.textContent = "🔄 Deleting old Main.rar...";
-      const deleteSuccess = await deleteMainRar(token);
-      if (!deleteSuccess && deleteSuccess !== null) {
-        status.textContent = "❌ Failed to delete old Main.rar.";
-        return;
-      }
+      // Upload new file
+      const putRes = await fetch(getUrl, {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json"
+        },
+        body: JSON.stringify({
+          message: "Uploaded new Main.rar via web dashboard",
+          content: base64Data
+        })
+      });
 
-      status.textContent = "⬆️ Uploading new Main.rar...";
-      const uploadSuccess = await uploadMainRar(token, file);
-      if (!uploadSuccess) {
-        status.textContent = "❌ Failed to upload new Main.rar.";
-        return;
-      }
-
-      status.textContent = "✏️ Updating version.txt...";
-      const oldVersion = await fetchVersionFile(token);
-      const versionSuccess = await updateVersionTxt(token, versionField.value, oldVersion.sha);
-      if (!versionSuccess) {
-        status.textContent = "❌ Failed to update version.txt.";
-        return;
-      }
-
-      status.textContent = "✅ Update complete!";
-      status.style.color = 'lightgreen';
+      return putRes.ok;
     }
 
-    // Load current version on page load
-   window.onload = () => {
-  const tokenInput = document.getElementById('tokenInput');
-  const versionField = document.getElementById('versionField');
+    async function postUpdate() {
+      const token = document.getElementById("tokenInput").value.trim();
+      const newVersion = document.getElementById("versionField").value.trim();
+      const file = document.getElementById("fileInput").files[0];
+      const status = document.getElementById("status");
 
-  tokenInput.addEventListener("input", async () => {
-    const token = tokenInput.value.trim();
-    if (!token) return;
+      if (!token || !newVersion || !file) {
+        status.textContent = "⚠️ Please provide token, version text, and select a file.";
+        return;
+      }
 
-    versionField.value = "Fetching version...";
+      status.textContent = "⏳ Uploading...";
 
-    try {
       const result = await fetchVersionFile(token);
-      versionField.value = result.content;
-      console.log("✅ Version loaded:", result.content);
-    } catch (e) {
-      versionField.value = "❌ Error loading version.";
-      console.error(e);
-    }
-  });
-};
+      if (!result.sha) {
+        status.textContent = "❌ Failed to get version.txt SHA.";
+        return;
+      }
 
+      const updated = await updateVersionFile(token, newVersion, result.sha);
+      const uploaded = await uploadFile(token, file);
+
+      if (updated && uploaded) {
+        status.textContent = "✅ Version and file updated successfully!";
+      } else {
+        status.textContent = "❌ Failed to update one or more items.";
+      }
+    }
+
+    window.onload = () => {
+      const tokenInput = document.getElementById('tokenInput');
+      const versionField = document.getElementById('versionField');
+
+      tokenInput.addEventListener("input", async () => {
+        const token = tokenInput.value.trim();
+        if (!token) return;
+
+        versionField.value = "Fetching version...";
+
+        try {
+          const result = await fetchVersionFile(token);
+          versionField.value = result.content;
+          console.log("✅ Version loaded:", result.content);
+        } catch (e) {
+          versionField.value = "❌ Error loading version.";
+          console.error(e);
+        }
+      });
+    };
   </script>
 </body>
 </html>
