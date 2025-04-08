@@ -2,90 +2,199 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>File Uploader to GitHub</title>
+  <title>Updater Tool</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       background: #18191d;
       color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 50px;
+      padding: 40px;
     }
 
-    input, button {
-      margin: 10px;
+    section {
+      background: #24252b;
+      padding: 20px;
+      margin-bottom: 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+    }
+
+    input, textarea, button {
+      margin: 10px 0;
       padding: 10px;
-      border-radius: 8px;
-      border: none;
       font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     button {
-      background-color: #28a745;
+      background: #28a745;
       color: white;
       cursor: pointer;
     }
 
     .status {
-      margin-top: 20px;
-      font-size: 18px;
+      margin-top: 10px;
+      font-size: 15px;
     }
   </style>
 </head>
 <body>
 
-  <h2>Upload File to GitHub Folder</h2>
-  <input type="file" id="fileInput" />
-  <input type="text" id="folderName" placeholder="Folder name (optional)" />
-  <input type="text" id="tokenInput" placeholder="GitHub Token" />
-  <button onclick="uploadFile()">Upload</button>
+  <h1>🔧 Dev Panel — Part 1: Updater</h1>
 
-  <div class="status" id="statusText"></div>
+  <section>
+    <h2>Upload New Main.rar and Update Version</h2>
+    <input type="file" id="rarInput" accept=".rar" />
+    <textarea id="versionField" rows="2" placeholder="Loading current version..."></textarea>
+    <input type="text" id="tokenInput" placeholder="Your GitHub Token (fine-grained)" />
+    <button onclick="uploadUpdater()">Post Update</button>
+    <div class="status" id="statusUpdater"></div>
+  </section>
 
   <script>
-    async function uploadFile() {
-      const fileInput = document.getElementById('fileInput');
-      const folderName = document.getElementById('folderName').value.trim();
-      const token = document.getElementById('tokenInput').value.trim();
-      const statusText = document.getElementById('statusText');
+    const username = 'MrNoxy';
+    const repo = 'SpaceDevDash';
+    const updaterPath = 'updater';
 
-      if (!fileInput.files.length || !token) {
-        alert('Please select a file and enter your GitHub token.');
+    async function fetchVersionFile(token) {
+      const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/version.txt`;
+      const res = await fetch(url, {
+        headers: { Authorization: `token ${token}` }
+      });
+
+      if (!res.ok) {
+        return 'Error fetching version.txt';
+      }
+
+      const data = await res.json();
+      const content = atob(data.content);
+      return { content, sha: data.sha };
+    }
+
+    async function deleteMainRar(token) {
+      const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/Main.rar`;
+      const res = await fetch(url, {
+        headers: { Authorization: `token ${token}` }
+      });
+
+      if (res.status === 404) return null; // File doesn't exist
+
+      const data = await res.json();
+      const deleteRes = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `token ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: 'Delete old Main.rar',
+          sha: data.sha
+        })
+      });
+
+      return deleteRes.ok;
+    }
+
+    async function uploadMainRar(token, file) {
+      const reader = new FileReader();
+      return new Promise((resolve, reject) => {
+        reader.onload = async () => {
+          const base64Content = reader.result.split(',')[1];
+          const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/Main.rar`;
+
+          const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              Authorization: `token ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: 'Upload new Main.rar',
+              content: base64Content
+            })
+          });
+
+          resolve(res.ok);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function updateVersionTxt(token, newContent, oldSha) {
+      const url = `https://api.github.com/repos/${username}/${repo}/contents/${updaterPath}/version.txt`;
+
+      const encoded = btoa(newContent);
+
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `token ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: 'Update version.txt',
+          content: encoded,
+          sha: oldSha
+        })
+      });
+
+      return res.ok;
+    }
+
+    async function uploadUpdater() {
+      const token = document.getElementById('tokenInput').value.trim();
+      const file = document.getElementById('rarInput').files[0];
+      const versionField = document.getElementById('versionField');
+      const status = document.getElementById('statusUpdater');
+
+      if (!file || !token) {
+        alert("Please select a file and enter your GitHub token.");
         return;
       }
 
-      const file = fileInput.files[0];
-      const reader = new FileReader();
-      reader.onload = async function () {
-        const content = reader.result.split(',')[1]; // base64 encoded
-        const path = (folderName ? `${folderName}/` : '') + file.name;
+      status.textContent = "🔄 Deleting old Main.rar...";
+      const deleteSuccess = await deleteMainRar(token);
+      if (!deleteSuccess && deleteSuccess !== null) {
+        status.textContent = "❌ Failed to delete old Main.rar.";
+        return;
+      }
 
-        const response = await fetch(`https://api.github.com/repos/MrNoxy/SpaceDevDash/contents/${path}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `token ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            message: `Upload ${file.name}`,
-            content: content
-          })
-        });
+      status.textContent = "⬆️ Uploading new Main.rar...";
+      const uploadSuccess = await uploadMainRar(token, file);
+      if (!uploadSuccess) {
+        status.textContent = "❌ Failed to upload new Main.rar.";
+        return;
+      }
 
-        if (response.ok) {
-          statusText.textContent = `✅ Uploaded to ${path}`;
-          statusText.style.color = 'lightgreen';
-        } else {
-          const error = await response.json();
-          statusText.textContent = `❌ Upload failed: ${error.message}`;
-          statusText.style.color = 'red';
-        }
-      };
-      reader.readAsDataURL(file);
+      status.textContent = "✏️ Updating version.txt...";
+      const oldVersion = await fetchVersionFile(token);
+      const versionSuccess = await updateVersionTxt(token, versionField.value, oldVersion.sha);
+      if (!versionSuccess) {
+        status.textContent = "❌ Failed to update version.txt.";
+        return;
+      }
+
+      status.textContent = "✅ Update complete!";
+      status.style.color = 'lightgreen';
     }
-  </script>
 
+    // Load current version on page load
+    window.onload = async () => {
+      const tokenInput = document.getElementById('tokenInput');
+      tokenInput.addEventListener("change", async () => {
+        const token = tokenInput.value.trim();
+        const versionField = document.getElementById('versionField');
+
+        if (token) {
+          const result = await fetchVersionFile(token);
+          if (result.content) versionField.value = result.content;
+        }
+      });
+    };
+  </script>
 </body>
 </html>
